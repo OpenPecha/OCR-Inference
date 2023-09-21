@@ -1,0 +1,10 @@
+opencv-python
+numpy
+tensorflow
+onnxruntime
+matplotlib
+tqdm
+fast_ctc_decode
+scipy
+natsort
+scipy
