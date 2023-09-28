@@ -121,6 +121,11 @@ class LineDetection:
             original_image, back_sized_image
         )
         return back_sized_image, line_images, sorted_contours, bbox, peaks
+    
+
+    def predict_batch(self, image_list: list[np.array]):
+        pass
+
 
 
 class OCRInference:

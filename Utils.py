@@ -23,6 +23,19 @@ def create_dir(dir_name: str) -> None:
         os.makedirs(dir_name)
 
 
+def batch_data(images: list[str], batch_size: int = 8) -> list[str]:
+  if len(images) % batch_size == 0:
+    num_batches = len(images) // batch_size
+
+  else:
+    num_batches = (len(images) // batch_size)+1
+  
+  img_batches = np.array_split(images, num_batches)
+
+  return img_batches
+
+
+
 def resize_image(
     orig_img: np.array, target_width: int = 2048
 ) -> Tuple[np.array, float]:
