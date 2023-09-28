@@ -1,4 +1,5 @@
 {
-  "model": "Models/LineModels/line_model_v1_q.onnx",
-  "patch_size": 512
+  "cpu-model": "Models/LineModels/LineModel_v1.onnx",
+  "gpu-model": "Models/LineModels/LineModel_v1_gpu.onnx",
+  "patch_size": 256
 }

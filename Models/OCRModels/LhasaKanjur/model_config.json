@@ -1,8 +1,0 @@
-{
-    "model": "Models/OCRModels/LhasaKanjur/LhasaKanjur_prodigy.onnx",
-    "input_width": 2000,
-    "input_height": 80,
-    "input_layer" : "the_input",
-    "output_layer": "Final",
-    "charset" : " !#%'()+-./0123456789:=?@ADHIMNRSTUWXY[\\]_abcdefghijklmnoprstuwyz|~&äüö"
-  }

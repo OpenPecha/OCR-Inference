@@ -161,3 +161,6 @@ cython_debug/
 .idea/
 Predict_Debug.ipynb
 Timing_Tests.ipynb
+
+Data/LhasaKanjur
+Data/W26071-v56
