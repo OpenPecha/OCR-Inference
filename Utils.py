@@ -2,7 +2,6 @@ import os
 import cv2
 import math
 import numpy as np
-import tensorflow as tf
 from typing import Tuple
 from datetime import datetime
 from xml.dom import minidom

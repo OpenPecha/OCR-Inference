@@ -32,7 +32,7 @@ class LineDetection:
         self,
         config_file: str,
         binarize_output: bool = False,
-        execution_providers=None,
+        mode: str = "cpu",
     ) -> None:
         self._config_file = config_file
         self._onnx_model_file = None
@@ -40,8 +40,13 @@ class LineDetection:
         self._binarize_output = binarize_output
         self._inference = None
         # add other Execution Providers if applicable, see: https://onnxruntime.ai/docs/execution-providers
-        if execution_providers is None:
+        self.mode = mode
+        
+        if self.mode == "cuda":
+            execution_providers = ["CUDAExecutionProvider"]
+        else:
             execution_providers = ["CPUExecutionProvider"]
+
         self.execution_providers = execution_providers
 
         self._init()
@@ -49,8 +54,14 @@ class LineDetection:
     def _init(self) -> None:
         _file = open(self._config_file)
         json_content = json.loads(_file.read())
-        self._onnx_model_file = json_content["cpu-model"]
+        
+        if self.mode == "cuda":
+            self._onnx_model_file = json_content["gpu-model"]
+        else:
+            self._onnx_model_file = json_content["cpu-model"]
+ 
         self._patch_size = json_content["patch_size"]
+
 
         if self._onnx_model_file is not None:
             try:
@@ -113,7 +124,7 @@ class LineDetection:
 
 
 class OCRInference:
-    def __init__(self, config_file) -> None:
+    def __init__(self, config_file, mode: str = "cpu") -> None:
         self.config = config_file
         self._onnx_model_file = None
         self._input_width = 2000
@@ -121,21 +132,31 @@ class OCRInference:
         self._characters = []
         self._can_run = False
         self.ocr_session = None
-
+        self.mode = mode
         self._init()
 
     def _init(self) -> None:
         _file = open(self.config, encoding="utf-8")
         json_content = json.loads(_file.read())
-        self._onnx_model_file = json_content["cpu-model"]
+
+        if self.mode == "cuda":
+            self._onnx_model_file = json_content["gpu-model"]
+        else:
+            self._onnx_model_file = json_content["cpu-model"]
+
         self._input_width = json_content["input_width"]
         self._input_height = json_content["input_height"]
         self._input_layer = json_content["input_layer"]
         self._output_layer = json_content["output_layer"]
         self._add_channel_dim = json_content["add_channel_dim"]
         self.charset = json_content["charset"]
+
+        if self.mode == "cuda":
+            execution_providers = ["CUDAExecutionProvider"]
+        else:
+            execution_providers = ["CPUExecutionProvider"]
         self.ocr_session = ort.InferenceSession(
-            self._onnx_model_file, providers=["CPUExecutionProvider"]
+            self._onnx_model_file, providers=execution_providers
         )
 
     def run(self, line_images: list, replace_blank: str = ""):

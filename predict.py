@@ -10,16 +10,12 @@ import cv2
 import sys
 import logging
 import argparse
-import numpy as np
-import matplotlib.pyplot as plt
-
 from glob import glob
 from tqdm import tqdm
-
 from natsort import natsorted
-
-from Modules import LineDetection, OCRInference
 from Utils import create_dir, get_file_name
+from Modules import LineDetection, OCRInference
+
 
 line_model_config = "Models/LineModels/line_model_config.json"
 ocr_model_config = "Models/OCRModels/LhasaKanjur/ocr_model_config.json"
@@ -52,11 +48,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", type=str, required=True)
     parser.add_argument("--file_ext", type=str, required=False, default="jpg")
+    parser.add_argument(
+        "--mode", choices=["cpu", "cuda"], required=False, default="cpu"
+    )
 
     args = parser.parse_args()
 
     input_dir = args.input_dir
     file_ext = args.file_ext
+    mode = args.mode
 
     if not os.path.isdir(input_dir):
         sys.exit(f"'{input_dir}' is not a valid directory, cancelling training.")
@@ -72,10 +72,9 @@ if __name__ == "__main__":
     ### use this for training a network from scratch
     logging.info("starting inference....")
     line_inference = LineDetection(
-        config_file=line_model_config,
-        binarize_output=False,
+        config_file=line_model_config, binarize_output=False, mode=mode
     )
-    ocr_inference = OCRInference(config_file=ocr_model_config)
+    ocr_inference = OCRInference(config_file=ocr_model_config, mode=mode)
 
     for _, image_path in tqdm(enumerate(input_images), total=len(input_images)):
         run_ocr(image_path, out_path, save_preview=False)
