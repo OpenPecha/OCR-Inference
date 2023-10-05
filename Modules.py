@@ -74,7 +74,7 @@ class LineDetection:
         else:
             self.can_run = False
 
-        print.info(f"Line Inference -> Init(): {self.can_run}")
+        print(f"Line Inference -> Init(): {self.can_run}")
 
     def predict(
         self,
