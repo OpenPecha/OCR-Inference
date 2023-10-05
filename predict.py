@@ -2,10 +2,9 @@
 A minimalistic interface to run OCR on a given set of images stored locally. See the Predict Notebook for a simple walkthrough.
 Note: As of now the line_dilation has to be parameterized until this part of the pipeline has been more generalized. See examples in the Notebook for choosing parameters.
 
-Run e.g. python predict.py --input_dir "Data/W30125"
-python predict.py --input_dir "Data/W26071-v56" --file_ext "tif" --mode "cuda"
-
+Run e.g. python predict.py --input_dir "Data/W30125" --mode "cuda"
 """
+
 import os
 import cv2
 import sys
