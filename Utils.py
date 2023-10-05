@@ -2,7 +2,7 @@ import os
 import cv2
 import math
 import numpy as np
-from typing import Tuple
+
 from datetime import datetime
 from xml.dom import minidom
 from scipy.signal import find_peaks
@@ -38,7 +38,7 @@ def batch_data(images: list[str], batch_size: int = 8) -> list[str]:
 
 def resize_image(
     orig_img: np.array, target_width: int = 2048
-) -> Tuple[np.array, float]:
+) -> tuple[np.array, float]:
     if orig_img.shape[1] > orig_img.shape[0]:
         resize_factor = round(target_width / orig_img.shape[1], 2)
         target_height = int(orig_img.shape[0] * resize_factor)
@@ -56,7 +56,7 @@ def resize_image(
 
 def pad_image(
     img: np.array, patch_size: int = 64, is_mask=False
-) -> Tuple[np.array, Tuple[float, float]]:
+) -> tuple[np.array, tuple[float, float]]:
     x_pad = (math.ceil(img.shape[1] / patch_size) * patch_size) - img.shape[1]
     y_pad = (math.ceil(img.shape[0] / patch_size) * patch_size) - img.shape[0]
 

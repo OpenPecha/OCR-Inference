@@ -1,6 +1,5 @@
 import cv2
 import json
-import logging
 import numpy as np
 import onnxruntime as ort
 from scipy.special import expit
@@ -70,12 +69,12 @@ class LineDetection:
                 )
                 self.can_run = True
             except Exception as error:
-                logging.error(f"Error loading model file: {error}")
+                print.error(f"Error loading model file: {error}")
                 self.can_run = False
         else:
             self.can_run = False
 
-        logging.info(f"Line Inference -> Init(): {self.can_run}")
+        print.info(f"Line Inference -> Init(): {self.can_run}")
 
     def predict(
         self,
@@ -93,10 +92,10 @@ class LineDetection:
         image_batch = np.transpose(image_batch, axes=[0, 3, 1, 2])  # make B x C x H xW
 
         ort_batch = ort.OrtValue.ortvalue_from_numpy(image_batch)
-        ocr_results = self._inference.run_with_ort_values(
+        prediction = self._inference.run_with_ort_values(
             ["output"], {"input": ort_batch}
         )
-        prediction = ocr_results[0].numpy()
+        prediction = prediction[0].numpy()
         prediction = np.squeeze(prediction, axis=1)
         prediction = expit(prediction)
         prediction = np.where(prediction > class_threshold, 1.0, 0.0)

@@ -1,5 +1,5 @@
 {
-  "cpu-model": "Models/LineModels/LineModel_v1.onnx",
-  "gpu-model": "Models/LineModels/LineModel_v1_gpu.onnx",
-  "patch_size": 256
+  "cpu-model": "Models/LineModels/segmentation_model_cpu.onnx",
+  "gpu-model": "Models/LineModels/segmentation_model_cuda.onnx",
+  "patch_size": 512
 }
