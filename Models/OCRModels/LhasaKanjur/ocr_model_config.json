@@ -4,7 +4,8 @@
     "gpu-model": "Models/OCRModels/LhasaKanjur/LhasaKanjur_gpu.onnx",
     "input_width": 2000,
     "input_height": 80,
-    "add_channel_dim" : "no",
+    "squeeze_channel_dim" : "no",
+    "swap_hw": "no",
     "input_layer" : "input",
     "output_layer": "output",
     "charset" : "ß !#%'()+-./0123456789:=?@ADHIMNRSTUWXY[\\]_abcdefghijklmnoprstuwyz|~&äüö<>;"

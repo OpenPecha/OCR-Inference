@@ -13,7 +13,7 @@ from glob import glob
 from tqdm import tqdm
 from natsort import natsorted
 from Utils import create_dir, get_file_name
-from Modules import LineDetection, OCRInference
+from Modules import PatchedLineDetection, OCRInference
 
 
 line_model_config = "Models/LineModels/line_model_config.json"
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     ### use this for training a network from scratch
     print("starting inference....")
-    line_inference = LineDetection(
+    line_inference = PatchedLineDetection(
         config_file=line_model_config, binarize_output=False, mode=mode
     )
     ocr_inference = OCRInference(config_file=ocr_model_config, mode=mode)

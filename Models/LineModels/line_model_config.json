@@ -1,5 +1,17 @@
 {
-  "cpu-model": "Models/LineModels/segmentation_model_cpu.onnx",
-  "gpu-model": "Models/LineModels/segmentation_model_cuda.onnx",
+  "model": "segmentation_model",
+  "architecture": "deeplab",
+  "classes": [
+    "background",
+    "image",
+    "line",
+    "margin",
+    "caption"
+  ],
+  "input_width": "512",
+  "input_height": "512",
+  "batch_size": "64",
+  "cpu-model": "segmentation_model_cpu.onnx",
+  "gpu-model": "segmentation_model_cuda.onnx",
   "patch_size": 512
 }

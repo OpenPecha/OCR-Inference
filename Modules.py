@@ -1,6 +1,11 @@
+import os
 import cv2
 import json
+import shutil
+import requests
 import numpy as np
+from tqdm import tqdm
+from pathlib import Path
 import onnxruntime as ort
 from scipy.special import expit
 from scipy.signal import find_peaks
@@ -13,10 +18,15 @@ from Utils import (
     unpatch_prediction,
     generate_line_images,
     prepare_ocr_image,
+    prepare_tf_ocr_image,
+    binarize_line,
 )
 
+from KerasModels import Easter2
+from keras.models import Model
 
-class LineDetection:
+
+class PatchedLineDetection:
     """
     Handles layout detection
     Args:
@@ -40,7 +50,7 @@ class LineDetection:
         self._inference = None
         # add other Execution Providers if applicable, see: https://onnxruntime.ai/docs/execution-providers
         self.mode = mode
-        
+
         if self.mode == "cuda":
             execution_providers = ["CUDAExecutionProvider"]
         else:
@@ -53,14 +63,16 @@ class LineDetection:
     def _init(self) -> None:
         _file = open(self._config_file)
         json_content = json.loads(_file.read())
-        
-        if self.mode == "cuda":
-            self._onnx_model_file = json_content["gpu-model"]
-        else:
-            self._onnx_model_file = json_content["cpu-model"]
- 
-        self._patch_size = json_content["patch_size"]
+        model_path = Path(self._config_file).parent
+        print(f"Assuming model path: {model_path}")
 
+        # TODO: do some exception handling here if the files are not found
+        if self.mode == "cuda":
+            self._onnx_model_file = os.path.join(model_path, json_content["gpu-model"])
+        else:
+            self._onnx_model_file = os.path.join(model_path, json_content["cpu-model"])
+
+        self._patch_size = int(json_content["input_width"])  #  that's a little unclean
 
         if self._onnx_model_file is not None:
             try:
@@ -81,6 +93,7 @@ class LineDetection:
         original_image: np.array,
         unpatch_type: int = 0,
         class_threshold: float = 0.8,
+        line_kernel: int = 20,
     ) -> np.array:
         image, _ = resize_image(original_image)
         padded_img, (pad_x, pad_y) = pad_image(image, self._patch_size)
@@ -117,14 +130,9 @@ class LineDetection:
 
         # TODO: remove this into a post-processing module
         line_images, sorted_contours, bbox, peaks = generate_line_images(
-            original_image, back_sized_image
+            original_image, back_sized_image, line_kernel, self._binarize_output
         )
         return back_sized_image, line_images, sorted_contours, bbox, peaks
-    
-
-    def predict_batch(self, image_list: list[np.array]):
-        pass
-
 
 
 class OCRInference:
@@ -152,8 +160,11 @@ class OCRInference:
         self._input_height = json_content["input_height"]
         self._input_layer = json_content["input_layer"]
         self._output_layer = json_content["output_layer"]
-        self._add_channel_dim = json_content["add_channel_dim"]
-        self.charset = json_content["charset"]
+        self._squeeze_channel_dim = (
+            True if json_content["squeeze_channel_dim"] == "yes" else False
+        )
+        self._swap_hw = True if json_content["swap_hw"] == "yes" else False
+        self._characters = json_content["charset"]
 
         if self.mode == "cuda":
             execution_providers = ["CUDAExecutionProvider"]
@@ -163,14 +174,25 @@ class OCRInference:
             self._onnx_model_file, providers=execution_providers
         )
 
+        # print(f"Squeezing channel dim: {self._squeeze_channel_dim}")
+
     def run(self, line_images: list, replace_blank: str = ""):
+        line_tresh = 10  # temporary value, TODO: turn into width and height check
+        line_images = [x for x in line_images if x.shape[0] > line_tresh]
+
         img_batch = [
             prepare_ocr_image(
                 x, target_width=self._input_width, target_height=self._input_height
             )
             for x in line_images
         ]
-        img_batch = np.array(img_batch)
+        img_batch = np.array(img_batch, np.float32)
+
+        if self._squeeze_channel_dim:
+            img_batch = np.squeeze(img_batch, axis=1)
+
+        if self._swap_hw:
+            img_batch = np.transpose(img_batch, axes=[0, 2, 1])
 
         ort_batch = ort.OrtValue.ortvalue_from_numpy(img_batch)
         ocr_results = self.ocr_session.run_with_ort_values(
@@ -178,12 +200,11 @@ class OCRInference:
         )
         prediction = ocr_results[0].numpy()
         prediction = np.transpose(prediction, axes=[1, 0, 2])
-        # print(f"Raw prediction: {prediction.shape}")
 
         predicted_text = []
         for idx in range(prediction.shape[0]):
             pred_line = prediction[idx, :, :]
-            text, _ = viterbi_search(pred_line, self.charset)
+            text, _ = viterbi_search(pred_line, self._characters)
 
             if len(text) > 0:
                 predicted_text.append(text)
@@ -191,3 +212,70 @@ class OCRInference:
                 predicted_text.append("")
 
         return predicted_text, prediction
+
+
+class IIIFDownloader:
+    def __init__(self, output_dir: str) -> None:
+        self._output_dir = output_dir
+        self._current_download_dir = None
+
+        if not os.path.exists(self._output_dir):
+            os.makedirs(self._output_dir)
+
+    def get_download_dir(self) -> str:
+        return self._current_download_dir
+
+    def get_json(self, link: str):
+        response = requests.get(link)
+        return response.json()
+
+    def download_data(self, manifest_data: str, work_id: str, file_limit: int = 20):
+        if "sequences" in manifest_data:
+            seq = manifest_data["sequences"]
+            volume_id = seq[0]["@id"].split("bdr:")[1].split("/")[0]
+
+            volume_out = os.path.join(self._output_dir, work_id, volume_id)
+            self._current_download_dir = volume_out
+
+            if not os.path.exists(volume_out):
+                os.makedirs(volume_out)
+
+            max_images = len(seq[0]["canvases"])
+
+            if max_images > 0:
+                if file_limit == 0 or file_limit > max_images or file_limit < 0:
+                    file_limit = max_images
+
+                for idx in tqdm(range(file_limit)):
+                    if "images" in seq[0]["canvases"][idx]:
+                        img_url = seq[0]["canvases"][idx]["images"][0]["resource"][
+                            "@id"
+                        ]
+                        img_name = img_url.split("::")[1].split(".")[0]
+                        out_file = f"{volume_out}/{img_name}.jpg"
+
+                        if not os.path.isfile(out_file):
+                            res = requests.get(img_url, stream=True)
+
+                            if res.status_code == 200:
+                                with open(out_file, "wb") as f:
+                                    shutil.copyfileobj(res.raw, f)
+
+    def download(self, manifest_link: str, file_limit: int = 50):
+        file_limit = int(file_limit)
+        work_id = manifest_link.split(":")[-1]
+        data = self.get_json(manifest_link)
+
+        if not "sequences" in data:
+            print("No direkt manifest found, assuming this is a collection manifest")
+            manifests = data["manifests"]
+
+            for manifest in manifests:
+                manifest_data = self.get_json(manifest["@id"])
+                self.download_data(
+                    manifest_data,
+                    work_id,
+                    file_limit=file_limit,
+                )
+        else:
+            self.download_data(data, work_id, file_limit=file_limit)

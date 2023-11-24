@@ -159,11 +159,15 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 
 .idea/
+
 predict_debug.py
 Predict_Debug.ipynb
+Debug-Predictions.ipynb
+DataMapping.ipynb
 Timing_Tests.ipynb
 
-Data/W30125/predictions
-Data/LhasaKanjur
-Data/W26071-v56
-Data/W22272-v5
+Data
+Models/LineModels/2023-11-17_10-47
+Models/KerasModels
+KerasModels.py
+DownloadIIIF.ipynb

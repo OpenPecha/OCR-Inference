@@ -1,6 +1,7 @@
 import os
 import cv2
 import math
+import tensorflow as tf
 import numpy as np
 
 from datetime import datetime
@@ -24,16 +25,45 @@ def create_dir(dir_name: str) -> None:
 
 
 def batch_data(images: list[str], batch_size: int = 8) -> list[str]:
-  if len(images) % batch_size == 0:
-    num_batches = len(images) // batch_size
+    if len(images) % batch_size == 0:
+        num_batches = len(images) // batch_size
 
-  else:
-    num_batches = (len(images) // batch_size)+1
-  
-  img_batches = np.array_split(images, num_batches)
+    else:
+        num_batches = (len(images) // batch_size) + 1
 
-  return img_batches
+    img_batches = np.array_split(images, num_batches)
 
+    return img_batches
+
+
+def get_lines_from_page(source_file: str) -> list[str]:
+    """
+    Returns a list of lines collected from a custom line-based annotation file, which
+    uses <line> tagging for line separation, and occasionally <gap> tagging to mark wider gaps in pages.
+    """
+
+    def _build_lines(file):
+        with open(file, "r", encoding="utf-8") as f:
+            content = f.read()
+            content = content.split("<line>")
+            content = [x.replace("\n", "") for x in content]
+            content = [x for x in content if x != ""]
+            final_lines = []
+
+            for line in content:
+                if "<gap>" in line:
+                    sub_lines = line.split("<gap>")
+
+                    for sub_l in sub_lines:
+                        if sub_l != "":
+                            final_lines.append(sub_l)
+
+                else:
+                    final_lines.append(line)
+
+        return final_lines
+
+    return _build_lines(source_file)
 
 
 def resize_image(
@@ -95,6 +125,21 @@ def resize_to_width(image, target_width: int):
     return image
 
 
+def binarize_line(img: np.array, adaptive: bool = False) -> np.array:
+    line_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    if adaptive:
+        bw = cv2.adaptiveThreshold(
+            line_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 11
+        )
+
+    else:
+        _, bw = cv2.threshold(line_img, 120, 255, cv2.THRESH_BINARY)
+
+    bw = cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)
+    return bw
+
+
 def pad_image2(
     img: np.array, target_width: int, target_height: int, padding: str
 ) -> np.array:
@@ -144,9 +189,7 @@ def pad_image2(
         v_stack *= 255
 
         out_img = np.vstack([v_stack, tmp_img])
-        print(
-            f"Info -> equal ratio: {img.shape}, w_ratio: {width_ratio}, h_ratio: {height_ratio}"
-        )
+        # print(f"Info -> equal ratio: {img.shape}, w_ratio: {width_ratio}, h_ratio: {height_ratio}")
 
     return cv2.resize(
         out_img, (target_width, target_height), interpolation=cv2.INTER_LINEAR
@@ -261,10 +304,16 @@ def rotate_page(
 def get_line_images(
     image: np.array,
     sorted_line_contours: dict,
-    dilate_kernel: int = 20,
+    dilate_kernel: int = 24,
     binarize: bool = False,
 ):
     line_images = []
+
+    # enforce a default value in case the somebody passes 0 as value
+    if dilate_kernel == 0:
+        dilate_kernel = 24
+
+    dilate_iterations = dilate_kernel
 
     for _, contour in sorted_line_contours.items():
         image_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
@@ -274,12 +323,21 @@ def get_line_images(
 
         _, _, _, height = cv2.boundingRect(contour)
 
-        if height < 60:
+        if height <= 30:
+            dilate_iterations = dilate_kernel // 2
+        elif height > 30 and height < 50:
             dilate_iterations = dilate_kernel * 1
-        elif height >= 60 and height < 90:
+        elif height >= 50 and height < 90:
             dilate_iterations = dilate_kernel * 2
+        elif height > 90:
+            dilate_iterations = (
+                dilate_kernel * 6
+            )  # maybe go with 4-5? kernel sizes can go up to 126
         else:
-            dilate_iterations = dilate_kernel * 6
+            print(
+                f"Fallback on kernel calculation, height: {height}: dilate_kernel = {dilate_kernel}, iterations: {dilate_iterations}"
+            )
+        # print(f"BBox Height: {height} => dilate iterations: {dilate_iterations}")
 
         dilated1 = cv2.dilate(
             image_mask,
@@ -307,21 +365,24 @@ def get_line_images(
             cropped_img, np.where(~cropped_img.any(axis=0))[0], axis=1
         )
 
-        if binarize:
-            indices = np.where(cropped_img[:, :, 1] == 0)
-            clear = cropped_img.copy()
-            clear[indices[0], indices[1], :] = [255, 255, 255]
-            clear_bw = cv2.cvtColor(clear, cv2.COLOR_BGR2GRAY)
-            _, thresh = cv2.threshold(clear_bw, 170, 255, cv2.THRESH_BINARY)
+        # print(cropped_img.shape)
 
-            line_images.append(thresh)
+        if binarize:
+            # indices = np.where(cropped_img[:, :, 1] == 0)
+            # clear = cropped_img.copy()
+            # clear[indices[0], indices[1], :] = [255, 255, 255]
+            # clear_bw = cv2.cvtColor(clear, cv2.COLOR_BGR2GRAY)
+            # _, thresh = cv2.threshold(clear_bw, 170, 255, cv2.THRESH_BINARY)
+            # line_images.append(thresh)
+            cropped_img = binarize_line(cropped_img)
+            line_images.append(cropped_img)
         else:
             line_images.append(cropped_img)
 
     return line_images
 
 
-def get_lines(image: np.array, prediction: np.array):
+def get_lines(image: np.array, prediction: np.array, line_kernel: int, binarize: bool):
     line_contours, _ = cv2.findContours(
         prediction, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
     )
@@ -335,12 +396,16 @@ def get_lines(image: np.array, prediction: np.array):
         bbox_center = (x + w // 2, y + h // 2)
         peaks = [bbox_center]
         sorted_contours = {bbox_center: line_contours[0]}
-        line_images = get_line_images(image, sorted_contours)
+        line_images = get_line_images(
+            image, sorted_contours, dilate_kernel=line_kernel, binarize=binarize
+        )
 
         return line_images, sorted_contours, (x, y, w, h), peaks
     else:
         sorted_contours, peaks = sort_lines(prediction, line_contours)
-        line_images = get_line_images(image, sorted_contours)
+        line_images = get_line_images(
+            image, sorted_contours, dilate_kernel=line_kernel, binarize=binarize
+        )
 
         return line_images, sorted_contours, (x, y, w, h), peaks
 
@@ -421,70 +486,9 @@ def sort_lines(line_prediction: np.array, contours: tuple):
     return sorted_contour_dict, peaks
 
 
-def get_line_images(
-    image: np.array,
-    sorted_line_contours: dict,
-    dilate_kernel: int = 20,
-    binarize: bool = False,
+def generate_line_images(
+    image: np.array, prediction: np.array, line_kernel: int, binarize: bool
 ):
-    line_images = []
-
-    for _, contour in sorted_line_contours.items():
-        image_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
-        cv2.drawContours(
-            image_mask, [contour], contourIdx=0, color=(255, 255, 255), thickness=-1
-        )
-
-        _, _, _, height = cv2.boundingRect(contour)
-
-        if height < 60:
-            dilate_iterations = dilate_kernel * 1
-        elif height >= 60 and height < 90:
-            dilate_iterations = dilate_kernel * 2
-        else:
-            dilate_iterations = dilate_kernel * 6
-
-        dilated1 = cv2.dilate(
-            image_mask,
-            kernel=(dilate_kernel, dilate_kernel),
-            iterations=dilate_iterations,
-            borderValue=0,
-            anchor=(-1, 0),
-            borderType=cv2.BORDER_DEFAULT,
-        )
-        dilated2 = cv2.dilate(
-            image_mask,
-            kernel=(dilate_kernel, dilate_kernel),
-            iterations=dilate_iterations,
-            borderValue=0,
-            anchor=(0, 1),
-            borderType=cv2.BORDER_DEFAULT,
-        )
-        combined = cv2.add(dilated1, dilated2)
-        image_masked = cv2.bitwise_and(image, image, mask=combined)
-
-        cropped_img = np.delete(
-            image_masked, np.where(~image_masked.any(axis=1))[0], axis=0
-        )
-        cropped_img = np.delete(
-            cropped_img, np.where(~cropped_img.any(axis=0))[0], axis=1
-        )
-
-        if binarize:
-            indices = np.where(cropped_img[:, :, 1] == 0)
-            clear = cropped_img.copy()
-            clear[indices[0], indices[1], :] = [255, 255, 255]
-            clear_bw = cv2.cvtColor(clear, cv2.COLOR_BGR2GRAY)
-            _, thresh = cv2.threshold(clear_bw, 170, 255, cv2.THRESH_BINARY)
-
-            line_images.append(thresh)
-        else:
-            line_images.append(cropped_img)
-
-    return line_images
-
-
-def generate_line_images(image: np.array, prediction: np.array):
     """
     Applies some rotation correction to the original image and creates the line images based on the predicted lines.
     """
@@ -492,7 +496,7 @@ def generate_line_images(image: np.array, prediction: np.array):
         original_image=image, line_mask=prediction
     )
     line_images, sorted_contours, bbox, peaks = get_lines(
-        rotated_img, rotated_prediction
+        rotated_img, rotated_prediction, line_kernel, binarize
     )
 
     return line_images, sorted_contours, bbox, peaks
@@ -513,12 +517,23 @@ def prepare_ocr_image(
         line_image,
         target_width=target_width,
         target_height=target_height,
-        padding="white",
+        padding="black",
     )
     image = image.reshape((1, target_height, target_width))
     image = (image / 127.5) - 1.0
     image = image.astype(np.float32)
     return image
+
+
+def prepare_tf_ocr_image(
+    image: np.array, target_height: int = 80, target_width: int = 2000
+):
+    tf_img = tf.image.resize_with_pad(tf_img, target_height, target_width)
+    tf_img = tf_img / 255.0
+    tf_img = tf.transpose(tf_img, perm=[1, 0, 2])
+    tf_img = tf.squeeze(tf_img)
+
+    return tf_img
 
 
 def get_utc_time():
