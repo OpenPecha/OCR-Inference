@@ -163,6 +163,7 @@ cython_debug/
 predict_debug.py
 Predict_Debug.ipynb
 Debug-Predictions.ipynb
+Demo-Prediction.ipynb
 DataMapping.ipynb
 Timing_Tests.ipynb
 

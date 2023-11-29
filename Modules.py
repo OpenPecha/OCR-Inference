@@ -129,10 +129,10 @@ class PatchedLineDetection:
         back_sized_image = back_sized_image.astype(np.uint8)
 
         # TODO: remove this into a post-processing module
-        line_images, sorted_contours, bbox, peaks = generate_line_images(
+        rotated_image, line_images, sorted_contours, bbox, peaks = generate_line_images(
             original_image, back_sized_image, line_kernel, self._binarize_output
         )
-        return back_sized_image, line_images, sorted_contours, bbox, peaks
+        return back_sized_image, rotated_image, line_images, sorted_contours, bbox, peaks
 
 
 class OCRInference:

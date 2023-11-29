@@ -125,7 +125,7 @@ def resize_to_width(image, target_width: int):
     return image
 
 
-def binarize_line(img: np.array, adaptive: bool = False) -> np.array:
+def binarize_line(img: np.array, adaptive: bool = True) -> np.array:
     line_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
     if adaptive:
@@ -499,7 +499,7 @@ def generate_line_images(
         rotated_img, rotated_prediction, line_kernel, binarize
     )
 
-    return line_images, sorted_contours, bbox, peaks
+    return rotated_img, line_images, sorted_contours, bbox, peaks
 
 
 def optimize_countour(cnt, e=0.001):

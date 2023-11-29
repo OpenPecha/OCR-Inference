@@ -18,16 +18,14 @@ cer_scorer = load("cer")
 
 
 line_model_config = "Models\LineModels\line_model_config.json"
-line_inference = PatchedLineDetection(
-        config_file=line_model_config, binarize_output=False, mode="cuda"
-    )
+
 
 ocr_model_config = "Models/OCRModels/LhasaKanjur/ocr_model_config.json"
 ocr_inference = OCRInference(config_file=ocr_model_config, mode="cuda")
 
 
 
-data_root = "Data/W23703/I1320"
+data_root = "Data/W23703/I1322"
 #image_path = os.path.join(data_root, "pages")
 image_path = data_root
 label_path = os.path.join(data_root, "transcriptions")
@@ -53,7 +51,13 @@ ds_dict = []
 alpha = 0.4
 
 
-def map_data():
+def map_data(binarize: bool = "False"):
+
+    line_inference = PatchedLineDetection(
+        config_file=line_model_config, binarize_output=binarize, mode="cuda"
+    )
+
+
     for page_idx, (image_path, label_path) in tqdm(enumerate(zip(images, labels)), total=len(images)):
         filename = os.path.basename(image_path).split(".")[0]
         image = cv2.imread(image_path)
@@ -61,7 +65,7 @@ def map_data():
         wylie_labels = [converter.toWylie(x) for x in wylie_labels]
         wylie_labels = [x.replace("_", " ")   for x in wylie_labels]
 
-        prediction, line_images, sorted_contours, bbox, peaks = line_inference.predict(image, 0, class_threshold=0.5, binarize=False)
+        prediction, line_images, sorted_contours, bbox, peaks = line_inference.predict(image, 0, class_threshold=0.5)
         prediction = cv2.cvtColor(prediction, cv2.COLOR_GRAY2RGB)
         prev_img = image.copy()
         cv2.addWeighted(prediction, alpha, prev_img, 1 - alpha, 0, prev_img)
@@ -117,5 +121,5 @@ def map_data():
 
 
 if __name__ == "__main__":
-    map_data()
+    map_data(binarize=False)
 

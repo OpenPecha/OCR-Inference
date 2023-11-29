@@ -48,6 +48,9 @@ if __name__ == "__main__":
     parser.add_argument("--input_dir", type=str, required=True)
     parser.add_argument("--file_ext", type=str, required=False, default="jpg")
     parser.add_argument(
+        "--binarize", choices=["yes", "no"], required=False, default="yes"
+    )
+    parser.add_argument(
         "--mode", choices=["cpu", "cuda"], required=False, default="cpu"
     )
     parser.add_argument("--save_preview", choices=["yes", "no"], required=False, default="no")
@@ -56,6 +59,7 @@ if __name__ == "__main__":
 
     input_dir = args.input_dir
     file_ext = args.file_ext
+    binarize = args.binarize
     mode = args.mode
     save_preview = True if args.save_preview == "yes" else False
 
@@ -73,7 +77,7 @@ if __name__ == "__main__":
     ### use this for training a network from scratch
     print("starting inference....")
     line_inference = PatchedLineDetection(
-        config_file=line_model_config, binarize_output=False, mode=mode
+        config_file=line_model_config, binarize_output=binarize, mode=mode
     )
     ocr_inference = OCRInference(config_file=ocr_model_config, mode=mode)
 
