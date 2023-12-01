@@ -65,7 +65,7 @@ def map_data(binarize: bool = "False"):
         wylie_labels = [converter.toWylie(x) for x in wylie_labels]
         wylie_labels = [x.replace("_", " ")   for x in wylie_labels]
 
-        prediction, line_images, sorted_contours, bbox, peaks = line_inference.predict(image, 0, class_threshold=0.5)
+        prediction, rotated_image, line_images, sorted_contours, bbox, peaks  = line_inference.predict(image, 0, class_threshold=0.5)
         prediction = cv2.cvtColor(prediction, cv2.COLOR_GRAY2RGB)
         prev_img = image.copy()
         cv2.addWeighted(prediction, alpha, prev_img, 1 - alpha, 0, prev_img)

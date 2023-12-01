@@ -193,13 +193,20 @@ class OCRInference:
 
         if self._swap_hw:
             img_batch = np.transpose(img_batch, axes=[0, 2, 1])
+        
 
         ort_batch = ort.OrtValue.ortvalue_from_numpy(img_batch)
         ocr_results = self.ocr_session.run_with_ort_values(
             [self._output_layer], {self._input_layer: ort_batch}
         )
         prediction = ocr_results[0].numpy()
-        prediction = np.transpose(prediction, axes=[1, 0, 2])
+        
+        # this is a little unclear, it basically takes into account, the different
+        # ordering of the channels for CRNN and EASTER models. Maybe rename this variable or make this process
+        # more explicit
+        
+        if not self._swap_hw:
+            prediction = np.transpose(prediction, axes=[1, 0, 2])
 
         predicted_text = []
         for idx in range(prediction.shape[0]):
