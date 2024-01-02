@@ -21,4 +21,4 @@ if __name__ == "__main__":
     iiif_manifest = f"https://iiifpres.bdrc.io/collection/wio:bdr:M{work_id}::bdr:{work_id}"
 
     iiif_downloader = IIIFDownloader(output_dir=output_dir)
-    iiif_downloader.download(iiif_manifest, file_limit=0)
+    iiif_downloader.download(iiif_manifest, file_limit=50)

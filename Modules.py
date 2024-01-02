@@ -41,12 +41,14 @@ class PatchedLineDetection:
         self,
         config_file: str,
         binarize_output: bool = False,
+        class_threshold: int = 0.8,
         mode: str = "cpu",
     ) -> None:
         self._config_file = config_file
         self._onnx_model_file = None
         self._patch_size = 512
         self._binarize_output = binarize_output
+        self._class_threshold = class_threshold
         self._inference = None
         # add other Execution Providers if applicable, see: https://onnxruntime.ai/docs/execution-providers
         self.mode = mode
@@ -92,7 +94,7 @@ class PatchedLineDetection:
         self,
         original_image: np.array,
         unpatch_type: int = 0,
-        class_threshold: float = 0.8,
+        class_threshold: float = 0.7,
         line_kernel: int = 20,
     ) -> np.array:
         image, _ = resize_image(original_image)
@@ -200,6 +202,7 @@ class OCRInference:
             [self._output_layer], {self._input_layer: ort_batch}
         )
         prediction = ocr_results[0].numpy()
+        #print(f"Prediction: {prediction.shape}")
         
         # this is a little unclear, it basically takes into account, the different
         # ordering of the channels for CRNN and EASTER models. Maybe rename this variable or make this process
@@ -214,6 +217,7 @@ class OCRInference:
             text, _ = viterbi_search(pred_line, self._characters)
 
             if len(text) > 0:
+                text = text.replace("§", replace_blank)
                 predicted_text.append(text)
             else:
                 predicted_text.append("")
@@ -236,7 +240,7 @@ class IIIFDownloader:
         response = requests.get(link)
         return response.json()
 
-    def download_data(self, manifest_data: str, work_id: str, file_limit: int = 20):
+    def download_data(self, manifest_data: str, work_id: str, file_limit: int = 20, last_pages: bool = True):
         if "sequences" in manifest_data:
             seq = manifest_data["sequences"]
             volume_id = seq[0]["@id"].split("bdr:")[1].split("/")[0]
@@ -267,6 +271,25 @@ class IIIFDownloader:
                             if res.status_code == 200:
                                 with open(out_file, "wb") as f:
                                     shutil.copyfileobj(res.raw, f)
+
+                # download also the last images within the range of the specified file-limit
+                if last_pages:
+                    for idx in tqdm(range(max_images-file_limit, max_images)):
+                        if "images" in seq[0]["canvases"][idx]:
+                            img_url = seq[0]["canvases"][idx]["images"][0]["resource"][
+                                "@id"
+                            ]
+                            img_name = img_url.split("::")[1].split(".")[0]
+                            out_file = f"{volume_out}/{img_name}.jpg"
+
+                            if not os.path.isfile(out_file):
+                                res = requests.get(img_url, stream=True)
+
+                                if res.status_code == 200:
+                                    with open(out_file, "wb") as f:
+                                        shutil.copyfileobj(res.raw, f)
+                
+
 
     def download(self, manifest_link: str, file_limit: int = 50):
         file_limit = int(file_limit)

@@ -42,28 +42,14 @@ def get_lines_from_page(source_file: str) -> list[str]:
     uses <line> tagging for line separation, and occasionally <gap> tagging to mark wider gaps in pages.
     """
 
-    def _build_lines(file):
-        with open(file, "r", encoding="utf-8") as f:
-            content = f.read()
-            content = content.split("<line>")
-            content = [x.replace("\n", "") for x in content]
-            content = [x for x in content if x != ""]
-            final_lines = []
-
-            for line in content:
-                if "<gap>" in line:
-                    sub_lines = line.split("<gap>")
-
-                    for sub_l in sub_lines:
-                        if sub_l != "":
-                            final_lines.append(sub_l)
-
-                else:
-                    final_lines.append(line)
-
-        return final_lines
-
-    return _build_lines(source_file)
+    with open(source_file, "r", encoding="utf-8") as f:
+        content = f.read()
+        content = content.split("<line>")
+        content = [x.replace("<gap>", "") for x in content]
+        content = [x.replace("\n", "") for x in content]
+        content = [x for x in content if x != ""]
+    
+    return content
 
 
 def resize_image(
@@ -130,7 +116,7 @@ def binarize_line(img: np.array, adaptive: bool = True) -> np.array:
 
     if adaptive:
         bw = cv2.adaptiveThreshold(
-            line_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 11
+            line_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 13
         )
 
     else:
@@ -313,7 +299,7 @@ def get_line_images(
     if dilate_kernel == 0:
         dilate_kernel = 24
 
-    dilate_iterations = dilate_kernel
+    dilate_iterations = 1
 
     for _, contour in sorted_line_contours.items():
         image_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
@@ -499,8 +485,57 @@ def generate_line_images(
         rotated_img, rotated_prediction, line_kernel, binarize
     )
 
-    return rotated_img, line_images, sorted_contours, bbox, peaks
+    return rotated_img, line_images, sorted_contours, bbox, peaks, angle
 
+
+"""
+The code for the contour rotation is taken from: https://medium.com/analytics-vidhya/tutorial-how-to-scale-and-rotate-contours-in-opencv-using-python-f48be59c35a2
+For this use case the contour is rotated 'back' using the center of the image, instead of the centroid of the contour
+"""
+
+
+def pol2cart(theta, rho):
+    x = rho * np.cos(theta)
+    y = rho * np.sin(theta)
+    return x, y
+
+
+def cart2pol(x, y):
+    theta = np.arctan2(y, x)
+    rho = np.hypot(x, y)
+    return theta, rho
+
+def rotate_contour(cnt, center, angle):
+    cx = center[0]
+    cy = center[1]
+
+    cnt_norm = cnt - [cx, cy]
+
+    coordinates = cnt_norm[:, 0, :]
+    xs, ys = coordinates[:, 0], coordinates[:, 1]
+    thetas, rhos = cart2pol(xs, ys)
+
+    thetas = np.rad2deg(thetas)
+    thetas = (thetas + angle) % 360
+    thetas = np.deg2rad(thetas)
+
+    xs, ys = pol2cart(thetas, rhos)
+
+    cnt_norm[:, 0, 0] = xs
+    cnt_norm[:, 0, 1] = ys
+
+    cnt_rotated = cnt_norm + [cx, cy]
+    cnt_rotated = cnt_rotated.astype(np.int32)
+
+    return cnt_rotated
+
+def back_rotate_lines(image: np.array, sorted_contours: dict, angle: float):
+    rows, cols = image.shape[:2]
+    line_contours = list(sorted_contours.values())
+    rotated_cnts = [rotate_contour(x, (cols / 2, rows / 2), angle) for x in line_contours]
+    rotated_cnts = [optimize_countour(x, e=0.001) for x in rotated_cnts]
+
+    return rotated_cnts
 
 def optimize_countour(cnt, e=0.001):
     epsilon = e * cv2.arcLength(cnt, True)
@@ -519,16 +554,15 @@ def prepare_ocr_image(
         target_height=target_height,
         padding="black",
     )
+
     image = image.reshape((1, target_height, target_width))
     image = (image / 127.5) - 1.0
     image = image.astype(np.float32)
     return image
 
 
-def prepare_tf_ocr_image(
-    image: np.array, target_height: int = 80, target_width: int = 2000
-):
-    tf_img = tf.image.resize_with_pad(tf_img, target_height, target_width)
+def prepare_tf_ocr_image(image: np.array, target_height: int = 80, target_width: int = 2000):
+    tf_img = tf.image.resize_with_pad(image, target_height, target_width)
     tf_img = tf_img / 255.0
     tf_img = tf.transpose(tf_img, perm=[1, 0, 2])
     tf_img = tf.squeeze(tf_img)
@@ -619,7 +653,7 @@ def build_xml_document(
     for i in range(0, len(coordinates)):
         text_coords = get_text_points(coordinates[i])
         # print(f"Unicode: {text_lines[i]}")
-        if text_lines != None:
+        if text_lines != None and len(text_lines) > 0:
             text_region.append(
                 get_text_line_block(text_coords, i, unicode_text=text_lines[i])
             )
